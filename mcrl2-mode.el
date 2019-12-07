@@ -18,13 +18,14 @@
 
 (defconst mcrl2-output-buffer "*mCRL2 Tools Output*")
 (defconst mcrl2tools-artifacts-folder "artifacts/")
+(defconst mcrl2tools-properties-folder "properties/")
 
 (defvar mcrl2-mode-hook nil)
 
 (defvar mcrl2-mode-map
   (let ((keymap (make-sparse-keymap)))
     (define-key keymap (kbd "C-c C-c") #'mcrl2-check-syntax-buffer)
-    (define-key keymap (kbd "C-c C-?") #'mcrl2-tools)
+    (define-key keymap (kbd "C-c C-t") #'mcrl2-tools)
     keymap)
   "Keymap for mCRL2 major mode.")
 
@@ -98,8 +99,19 @@
 
 (defun mcrl2-mcrl22lps (&optional args)
   "Call mcrl22lps with arguments ARGS."
-  (interactive (list (transient-args 'mcrl2-tools)))
+  (interactive (list (transient-args 'mcrl2-mcrl22lps-map)))
   (mcrl2-tools-shell "mcrl22lps" args "_lps" ".lps"))
+
+(defun mcrl2-transient-store-and-back()
+  (interactive)
+  (transient-set)
+  (mcrl2-tools))
+
+(defun mcrl2-lps2pbes (&optional args)
+  "Call lps2pbes with arguments ARGS."
+  (interactive (list (transient-args 'mcrl2-lps2pbes-map)))
+  (transient-set)
+  (mcrl2-tools-shell "lps2pbes" args "" ".pbes"))
 
 (defun mcrl2-tools-shell (bin args sep ext)
   "Call tool BIN with arguments ARGS, seperator SEP and extension EXT."
@@ -117,15 +129,136 @@
                                                                ext)))
                          buf)))
 
+(defun mcrl2-tools-shell-noartefacts (bin args sep ext)
+  "Call tool BIN with arguments ARGS, seperator SEP and extension EXT."
+  (let* ((buf (get-buffer-create mcrl2-output-buffer)))
+    (async-shell-command (concat bin
+                                 " " (mapconcat #'identity args " ") " "
+                                 (concat default-directory
+                                         mcrl2tools-artifacts-folder
+                                         (file-name-sans-extension (buffer-name))
+                                         sep
+                                         ext))
+                         buf)))
+
 (define-transient-command mcrl2-tools ()
-  "mcrl2 tools."
-  ["mcrl2lps"
-   [("-e" "check syntax and static semantics; do not linearise"  "--check-only")]
-   [("-v" "display short intermediate messages"     "--verbose")]
-   [("-d" "display detailed intermediate messages"  "--debug")]
-   ]
+  "mCRL2 Tools."
+  ["mCRL2 Tools."
+   [("L" "to LPS" mcrl2-mcrl22lps-map)
+    ("S" "to Simulate" mcrl2-lpssim-map)
+    ("v" "to Verify" mcrl2-verify-map)]
+   [("p" "lps2pbes" mcrl2-lps2pbes-map)
+    ("s" "pbessolve" mcrl2-pbessolve-map)]])
+
+(define-transient-command mcrl2-mcrl22lps-map ()
+  "mCRL2 to LPS."
+  :value '("--verbose")
+  ["Options:"
+   [("-e" "check syntax and static semantics; do not linearise"  "--check-only")
+    ]]
+  ["Standard options:"
+   [("-v" "display short intermediate messages"     "--verbose")
+    ("-d" "display detailed intermediate messages"  "--debug")
+    ("-h" "display help information"  "--help")]]
   ["Actions"
-   [("d" "mcrl2lps"          mcrl2-mcrl22lps)]])
+   [("L" "mCRL22LPS"          mcrl2-mcrl22lps)]])
+
+(define-transient-command mcrl2-lps2pbes-map ()
+  "LPS to PBES."
+  :value '("--verbose")
+  ["lps2pbes:"
+   [("-c" "add counter example equations to the generated PBES" "--counter-example")
+    ("-f" "use the state formula from FILE"                 "--formula=" mcrl2-read-file)
+    ("-m" "insert dummy fixpoints in modal operators, which may lead to smaller PBESs" "--preprocess-modal-operators")
+    (mcrl2-verify:--out)
+    ("-s" "generate equations such that no mixed conjunctions and disjunctions occur" "--structured")
+    ("-t" "--timed" "use the timed version of the algorithm, even for untimed LPS's")
+    ("-u" "--unoptimized" "do not simplify boolean expressions")]]
+  ["Standard options:"
+   [("-v" "display short intermediate messages"     "--verbose")
+    ("-d" "display detailed intermediate messages"  "--debug")
+    ("-h" "display help information"  "--help")]]
+  ["Actions"
+   [("p" "lps2pbes"          mcrl2-lps2pbes)]
+   [("s" "store"             mcrl2-transient-store-and-back)]
+   ]
+  )
+
+(define-transient-command mcrl2-pbessolve-map ()
+  "PBES solve."
+  :value '("--verbose")
+  ["Standard options:"
+   [("-v" "display short intermediate messages"     "--verbose")
+    ("-d" "display detailed intermediate messages"  "--debug")
+    ("-h" "display help information"  "--help")]]
+  )
+
+
+(defconst mcrl2-standard-options ["Standard options:"
+                                  [("-v" "display short intermediate messages"     "--verbose")
+                                   ("-d" "display detailed intermediate messages"  "--debug")
+                                   ("-h" "display help information"  "--help")]])
+(define-transient-command mcrl2-lpssim-map ()
+  "Simulate the LPS in INFILE via a text-based interface."
+  ["Options:"
+   [("-y" "do not replace global variables in the LPS with dummy values"  "--nodummy")
+    ]]
+  ["Standard options:"
+   [("-v" "display short intermediate messages"     "--verbose")
+    ("-d" "display detailed intermediate messages"  "--debug")
+    ("-h" "display help information"  "--help")]]
+  ["Actions"
+   [("s" "lpssim"          mcrl2-lpssim)]])
+
+(define-infix-argument mcrl2-verify:--out ()
+  :description "output format"
+  :class 'transient-option
+  :key "-o"
+  :argument "--out="
+  :reader 'mcrl2-lps2pbes-select-out-format)
+
+(defun mcrl2-lps2pbes-select-out-format (&rest _ignore)
+  (magit-read-char-case nil t
+    (?b "[b]es"       "BES in internal format")
+    (?p "[p]bes"      "PBES in internal format (default)")
+    (?g "p[g]solver"  "BES in PGSolver format")
+    (?t "[t]ext"      "PBES in textual (mCRL2) format")))
+
+(define-transient-command mcrl2-verify-map ()
+  "Verify."
+  :value '("--verbose")
+  ["Standard options:"
+   [("-v" "display short intermediate messages"     "--verbose")
+    ("-d" "display detailed intermediate messages"  "--debug")
+    ("-h" "display help information"                "--help")]]
+  ["Actions"
+   [("v" "verify"          mcrl2-verify)]])
+
+(define-infix-argument mcrl2:-f ()
+  :description "File"
+  :class 'transient-files
+  :argument "-f"
+  :reader 'mcrl2-read-file)
+
+(defun mcrl2-read-file (&rest _)
+  "Prompt for formula."
+  (expand-file-name (read-file-name "Formula: " (concat default-directory mcrl2tools-properties-folder))))
+
+(defun mcrl2-lpssim (&optional args)
+  "Call lpssim with arguments ARGS."
+  (interactive (list (transient-args 'mcrl2-lpssim-map)))
+  (mcrl2-tools-shell-noartefacts "lpssim" args "_lps" ".lps")
+  (switch-to-buffer mcrl2-output-buffer))
+
+(defun mcrl2-verify (&optional args)
+  "Call verify with arguments ARGS."
+  (interactive (list (transient-args 'mcrl2-verify-map)))
+                                        ;(mcrl2-tools-shell-noartefacts "lpssim" args "_lps" ".lps")
+  (message "echo verify %s" args)
+  (message "echo lps2pbes %s" (transient-args 'mcrl2-lps2pbes-map))
+  (message "echo pbessolve %s" (transient-args 'mcrl2-pbessolve-map))
+  (switch-to-buffer mcrl2-output-buffer))
+
 
 (defun mcrl2-mode ()
   "Mode for editing mCRL2 specifications."
