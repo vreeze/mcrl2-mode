@@ -171,7 +171,7 @@
     ("p" "lps2pbes" mcrl2-lps2pbes-map)
     ("s" "pbessolve" mcrl2-pbessolve-map)]]
   ["Actions:"
-   [("P" "Parse Specification" mcrl2-lpssim-map)
+   [;;("P" "Parse Specification" mcrl2-lpssim-map)
     ("S" "Simulate" mcrl2-lpssim-map)
     ("V" "Verify" mcrl2-verify-map)]])
 

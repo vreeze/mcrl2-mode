@@ -5,6 +5,9 @@ This is a major mode to edit and analyse mCRL2 specifications using the mCRL2 to
 The idea is to give the same functionality as mCRL2 IDE and parts of mCRL2 GUI.
 
 ![](gif/mcrl2-mode.gif)
+
+The output will be written in to the buffer `*mCRL2 Tools Output` and the output files will be written in the folder `artifacts`.
+
 ## Installation
 
 The usual Emacs way.
