@@ -1,10 +1,34 @@
 ;;; mcrl2-mode.el --- Major mode for mCRL2 specifications -*- lexical-binding: t; -*-
 
-;;; Package --- summary:
+;;; eboy.el ---  Emulator  -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2019 Pieter de Vreeze <mail@de-vreeze.com>
+
+;; Author: Pieter de Vreeze <mail@de-vreeze.com>
+;; URL: https://github.com/vreeze/mcrl2-mode
+;; Version: 0.0.1
+;; Package-Requires:
+;; Keywords:
+
+;; This file is NOT part of GNU Emacs.
+
+;; This file is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+
+;; This file is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with GNU Emacs; see the file COPYING. If not, write to
+;; the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+;; Boston, MA 02111-1307, USA.
 
 ;;; Commentary:
-
-;;; Code:
+;; This is a major mode to edit and analyse mCRL2 specifications using the mCRL2 toolset.
 (require 'transient)
 
 (defgroup mcrl2-mode nil
@@ -120,8 +144,7 @@
   (let* ((buf (get-buffer-create mcrl2-output-buffer)))
     (async-shell-command (concat bin
                                  " " (mapconcat #'identity args " ") " "
-                                 (shell-quote-argument buffer-file-name)
-                                 " > "
+                                 (shell-quote-argument buffer-file-name) " "
                                  (shell-quote-argument (concat default-directory
                                                                mcrl2tools-artifacts-folder
                                                                (file-name-sans-extension (buffer-name))
