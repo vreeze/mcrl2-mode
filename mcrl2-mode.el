@@ -144,10 +144,10 @@
   (let* ((buf (get-buffer-create mcrl2-output-buffer)))
     (async-shell-command (concat bin
                                  " " (mapconcat #'identity args " ") " "
-                                 (shell-quote-argument buffer-file-name) " "
+                                 (shell-quote-argument (file-name-nondirectory (buffer-file-name))) " "
                                  (shell-quote-argument (concat default-directory
                                                                mcrl2tools-artifacts-folder
-                                                               (file-name-sans-extension (buffer-name))
+                                                               (file-name-sans-extension (file-name-nondirectory (buffer-file-name)))
                                                                sep
                                                                ext)))
                          buf)))
@@ -159,19 +159,21 @@
                                  " " (mapconcat #'identity args " ") " "
                                  (concat default-directory
                                          mcrl2tools-artifacts-folder
-                                         (file-name-sans-extension (buffer-name))
+                                         (file-name-sans-extension (file-name-nondirectory (buffer-file-name)))
                                          sep
                                          ext))
                          buf)))
 
 (define-transient-command mcrl2-tools ()
   "mCRL2 Tools."
-  ["mCRL2 Tools."
-   [("L" "to LPS" mcrl2-mcrl22lps-map)
-    ("S" "to Simulate" mcrl2-lpssim-map)
-    ("v" "to Verify" mcrl2-verify-map)]
-   [("p" "lps2pbes" mcrl2-lps2pbes-map)
-    ("s" "pbessolve" mcrl2-pbessolve-map)]])
+  ["mCRL2 Tools - configure/execute"
+   [("l" "mcrl22lps" mcrl2-mcrl22lps-map)
+    ("p" "lps2pbes" mcrl2-lps2pbes-map)
+    ("s" "pbessolve" mcrl2-pbessolve-map)]]
+  ["Actions:"
+   [("P" "Parse Specification" mcrl2-lpssim-map)
+    ("S" "Simulate" mcrl2-lpssim-map)
+    ("V" "Verify" mcrl2-verify-map)]])
 
 (define-transient-command mcrl2-mcrl22lps-map ()
   "mCRL2 to LPS."
@@ -184,7 +186,8 @@
     ("-d" "display detailed intermediate messages"  "--debug")
     ("-h" "display help information"  "--help")]]
   ["Actions"
-   [("L" "mCRL22LPS"          mcrl2-mcrl22lps)]])
+   [("l" "mCRL22LPS"          mcrl2-mcrl22lps)]
+   [("s" "store and back"     mcrl2-transient-store-and-back)]])
 
 (define-transient-command mcrl2-lps2pbes-map ()
   "LPS to PBES."
@@ -203,24 +206,32 @@
     ("-h" "display help information"  "--help")]]
   ["Actions"
    [("p" "lps2pbes"          mcrl2-lps2pbes)]
-   [("s" "store"             mcrl2-transient-store-and-back)]
+   [("s" "store and back"    mcrl2-transient-store-and-back)]
    ]
   )
 
 (define-transient-command mcrl2-pbessolve-map ()
   "PBES solve."
   :value '("--verbose")
+  ["pbessolve:"
+   [("-e" "The file to which the evidence is written. If not set, a default name will be chosen." "--evidence-file")
+    ("-f" "The file containing the LPS or LTS that was used to generate the PBES using lps2pbes -c. If this option
+is set, a counter example or witness for the encoded property will be generated. The extension of the file
+should be .lps in case of an LPS file, in all other cases it is assumed to be an LTS." "--file")]]
   ["Standard options:"
    [("-v" "display short intermediate messages"     "--verbose")
     ("-d" "display detailed intermediate messages"  "--debug")
     ("-h" "display help information"  "--help")]]
-  )
+  ["Actions"
+   ;;[("p" "pbessolve"          mcrl2-pbessolve)]
+   [("s" "store and back"     mcrl2-transient-store-and-back)]])
 
 
 (defconst mcrl2-standard-options ["Standard options:"
                                   [("-v" "display short intermediate messages"     "--verbose")
                                    ("-d" "display detailed intermediate messages"  "--debug")
                                    ("-h" "display help information"  "--help")]])
+
 (define-transient-command mcrl2-lpssim-map ()
   "Simulate the LPS in INFILE via a text-based interface."
   ["Options:"
@@ -265,7 +276,7 @@
 
 (defun mcrl2-read-file (&rest _)
   "Prompt for formula."
-  (expand-file-name (read-file-name "Formula: " (concat default-directory mcrl2tools-properties-folder))))
+  (file-relative-name (expand-file-name (read-file-name "Formula: " (concat default-directory mcrl2tools-properties-folder))) default-directory))
 
 (defun mcrl2-lpssim (&optional args)
   "Call lpssim with arguments ARGS."
@@ -277,10 +288,33 @@
   "Call verify with arguments ARGS."
   (interactive (list (transient-args 'mcrl2-verify-map)))
                                         ;(mcrl2-tools-shell-noartefacts "lpssim" args "_lps" ".lps")
-  (message "echo verify %s" args)
-  (message "echo lps2pbes %s" (transient-args 'mcrl2-lps2pbes-map))
-  (message "echo pbessolve %s" (transient-args 'mcrl2-pbessolve-map))
-  (switch-to-buffer mcrl2-output-buffer))
+  (message "echo %s, %s, %s, %s" args (transient-args 'mcrl2-mcrl22lps-map) (transient-args 'mcrl2-lps2pbes-map) (transient-args 'mcrl2-pbessolve-map))
+  (unless (file-exists-p mcrl2tools-artifacts-folder)
+    (make-directory mcrl2tools-artifacts-folder))
+  (let* ((buf (get-buffer-create mcrl2-output-buffer))
+         (specname (file-name-sans-extension (file-name-nondirectory (buffer-file-name))))
+         (lpsname (concat mcrl2tools-artifacts-folder specname ".lps"))
+         (pbesname (concat mcrl2tools-artifacts-folder specname ".pbes"))
+         (mcrl22lps-args (mapconcat #'identity (transient-args 'mcrl2-mcrl22lps-map) " "))
+         (lps2pbes-args (mapconcat #'identity (transient-args 'mcrl2-lps2pbes-map) " "))
+         (pbessolve-args (mapconcat #'identity (transient-args 'mcrl2-pbessolve-map) " "))
+         (mcrl22lps-cmd (concat "mcrl22lps"
+                                " " mcrl22lps-args
+                                " " (shell-quote-argument (file-name-nondirectory (buffer-file-name)))
+                                " " (shell-quote-argument lpsname)))
+         (lps2pbes-cmd (concat "lps2pbes"
+                               " " lps2pbes-args
+                               " " (shell-quote-argument lpsname)
+                               " " (shell-quote-argument pbesname)))
+         (pbessolve-cmd (concat "pbessolve"
+                                " " pbessolve-args
+                                " " (shell-quote-argument pbesname))))
+
+    (async-shell-command (concat mcrl22lps-cmd
+                                 " && " lps2pbes-cmd
+                                 " && " pbessolve-cmd)
+                         buf)
+    ))
 
 
 (defun mcrl2-mode ()
