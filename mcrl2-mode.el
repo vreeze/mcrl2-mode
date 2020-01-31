@@ -1,7 +1,5 @@
 ;;; mcrl2-mode.el --- Major mode for mCRL2 specifications -*- lexical-binding: t; -*-
 
-;;; eboy.el ---  Emulator  -*- lexical-binding: t; -*-
-
 ;; Copyright (C) 2019 Pieter de Vreeze <mail@de-vreeze.com>
 
 ;; Author: Pieter de Vreeze <mail@de-vreeze.com>
@@ -105,7 +103,8 @@
                                             (buffer-string))))
                               (if (string-match-p (regexp-quote "contains a well-formed mCRL2 specification") output)
                                   (message output)
-                                (switch-to-buffer-other-window mcrl2-output-buffer)))))))
+                                ;;(switch-to-buffer-other-window mcrl2-output-buffer)
+                                ))))))
 
 (defun mcrl2-check-syntax-buffer ()
   "Check the syntax of the current buffer."
@@ -124,7 +123,12 @@
 (defun mcrl2-mcrl22lps (&optional args)
   "Call mcrl22lps with arguments ARGS."
   (interactive (list (transient-args 'mcrl2-mcrl22lps-map)))
-  (mcrl2-tools-shell "mcrl22lps" args "_lps" ".lps"))
+  (mcrl2-tools-shell "mcrl22lps" args (mcrl2-get-file-name nil ".mcrl2") (mcrl2-get-file-name 't ".lps")))
+
+(defun mcrl2-lps2lts (&optional args)
+  "Call lps2lts with arguments ARGS."
+  (interactive (list (transient-args 'mcrl2-lps2lts-map)))
+  (mcrl2-tools-shell "lps2lts" args (mcrl2-get-file-name 't ".lps") (mcrl2-get-file-name 't ".lts")))
 
 (defun mcrl2-transient-store-and-back()
   (interactive)
@@ -135,43 +139,45 @@
   "Call lps2pbes with arguments ARGS."
   (interactive (list (transient-args 'mcrl2-lps2pbes-map)))
   (transient-set)
-  (mcrl2-tools-shell "lps2pbes" args "" ".pbes"))
+  (mcrl2-tools-shell "lps2pbes" args (mcrl2-get-file-name 't ".lps") (mcrl2-get-file-name 't ".pbes")))
 
-(defun mcrl2-tools-shell (bin args sep ext)
-  "Call tool BIN with arguments ARGS, seperator SEP and extension EXT."
+(defun mcrl2-get-file-name (is-artifact extension)
+  "Construct input file, prepend with artifact folder if IS-ARTIFACT is t, concat with EXTENSION."
+  (concat (if is-artifact
+              mcrl2tools-artifacts-folder
+            "")
+          (file-name-sans-extension (file-name-nondirectory (buffer-file-name)))
+          extension))
+
+(defun mcrl2-tools-shell (bin args in-file out-file)
+  "Call tool BIN with arguments ARGS and input file IN-FILE and output file OUT-FILE."
   (unless (file-exists-p mcrl2tools-artifacts-folder)
     (make-directory mcrl2tools-artifacts-folder))
   (let* ((buf (get-buffer-create mcrl2-output-buffer)))
     (async-shell-command (concat bin
                                  " " (mapconcat #'identity args " ") " "
-                                 (shell-quote-argument (file-name-nondirectory (buffer-file-name))) " "
-                                 (shell-quote-argument (concat default-directory
-                                                               mcrl2tools-artifacts-folder
-                                                               (file-name-sans-extension (file-name-nondirectory (buffer-file-name)))
-                                                               sep
-                                                               ext)))
+                                 (shell-quote-argument in-file) " "
+                                 (shell-quote-argument out-file))
                          buf)))
 
-(defun mcrl2-tools-shell-noartefacts (bin args sep ext)
-  "Call tool BIN with arguments ARGS, seperator SEP and extension EXT."
+(defun mcrl2-tools-shell-noartefacts (bin args in-file)
+  "Call tool BIN with arguments ARGS and input file IN-FILE."
   (let* ((buf (get-buffer-create mcrl2-output-buffer)))
     (async-shell-command (concat bin
                                  " " (mapconcat #'identity args " ") " "
-                                 (concat default-directory
-                                         mcrl2tools-artifacts-folder
-                                         (file-name-sans-extension (file-name-nondirectory (buffer-file-name)))
-                                         sep
-                                         ext))
+                                 in-file)
                          buf)))
 
 (define-transient-command mcrl2-tools ()
   "mCRL2 Tools."
   ["mCRL2 Tools - configure/execute"
    [("l" "mcrl22lps" mcrl2-mcrl22lps-map)
+    ("t" "lps2lts" mcrl2-lps2lts-map)
     ("p" "lps2pbes" mcrl2-lps2pbes-map)
     ("s" "pbessolve" mcrl2-pbessolve-map)]]
   ["Actions:"
    [;;("P" "Parse Specification" mcrl2-lpssim-map)
+    ("I" "LTS Info" mcrl2-ltsinfo)
     ("S" "Simulate" mcrl2-lpssim-map)
     ("V" "Verify" mcrl2-verify-map)]])
 
@@ -187,6 +193,20 @@
     ("-h" "display help information"  "--help")]]
   ["Actions"
    [("l" "mCRL22LPS"          mcrl2-mcrl22lps)]
+   [("s" "store and back"     mcrl2-transient-store-and-back)]])
+
+(define-transient-command mcrl2-lps2lts-map ()
+  "LPS to LTS."
+  :value '("--verbose")
+  ["Options:"
+   [("-D" "detect deadlocks (i.e. for every deadlock a message is printed)"  "--deadlock")
+    ]]
+  ["Standard options:"
+   [("-v" "display short intermediate messages"     "--verbose")
+    ("-d" "display detailed intermediate messages"  "--debug")
+    ("-h" "display help information"  "--help")]]
+  ["Actions"
+   [("t" "LPS2LTS"            mcrl2-lps2lts)]
    [("s" "store and back"     mcrl2-transient-store-and-back)]])
 
 (define-transient-command mcrl2-lps2pbes-map ()
@@ -281,13 +301,18 @@ should be .lps in case of an LPS file, in all other cases it is assumed to be an
 (defun mcrl2-lpssim (&optional args)
   "Call lpssim with arguments ARGS."
   (interactive (list (transient-args 'mcrl2-lpssim-map)))
-  (mcrl2-tools-shell-noartefacts "lpssim" args "_lps" ".lps")
+  (mcrl2-tools-shell-noartefacts "lpssim" args (mcrl2-get-file-name 't ".lps"))
+  (switch-to-buffer mcrl2-output-buffer))
+
+(defun mcrl2-ltsinfo (&optional args)
+  "Call ltsinfo."
+  (interactive (list (transient-args 'mcrl2-tools)))
+  (mcrl2-tools-shell-noartefacts "ltsinfo" "" (mcrl2-get-file-name 't ".lts"))
   (switch-to-buffer mcrl2-output-buffer))
 
 (defun mcrl2-verify (&optional args)
   "Call verify with arguments ARGS."
   (interactive (list (transient-args 'mcrl2-verify-map)))
-                                        ;(mcrl2-tools-shell-noartefacts "lpssim" args "_lps" ".lps")
   (message "echo %s, %s, %s, %s" args (transient-args 'mcrl2-mcrl22lps-map) (transient-args 'mcrl2-lps2pbes-map) (transient-args 'mcrl2-pbessolve-map))
   (unless (file-exists-p mcrl2tools-artifacts-folder)
     (make-directory mcrl2tools-artifacts-folder))
