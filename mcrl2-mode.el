@@ -301,6 +301,10 @@ should be .lps in case of an LPS file, in all other cases it is assumed to be an
 (defun mcrl2-lpssim (&optional args)
   "Call lpssim with arguments ARGS."
   (interactive (list (transient-args 'mcrl2-lpssim-map)))
+  ;; If mcrl2 file is newer than lps file, suggest to run mcrl22lps
+  (when (file-newer-than-file-p (mcrl2-get-file-name nil ".mcrl2") (mcrl2-get-file-name 't ".lps"))
+    (mcrl2-mcrl22lps))
+  ;; TODO: If mcrl22lps returns an error, do not start lpssim
   (mcrl2-tools-shell-noartefacts "lpssim" args (mcrl2-get-file-name 't ".lps"))
   (switch-to-buffer mcrl2-output-buffer))
 
